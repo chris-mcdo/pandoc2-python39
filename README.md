@@ -6,7 +6,8 @@ and
 [python](https://github.com/docker-library/python/)
 containers.
 
-Uses the latest version of pandoc 2 (built on [alpine](https://alpinelinux.org/)
+Uses the latest version of [pandoc2/latex](https://hub.docker.com/r/pandoc/latex)
+(built on [alpine](https://alpinelinux.org/)
 Linux) as the base image, and adds a python 3.9 installation.
 
 ## License
