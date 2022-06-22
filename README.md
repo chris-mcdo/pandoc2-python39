@@ -7,8 +7,7 @@ and
 containers.
 
 Uses the latest version of [pandoc2/latex](https://hub.docker.com/r/pandoc/latex)
-(built on [alpine](https://alpinelinux.org/)
-Linux) as the base image, and adds a python 3.9 installation.
+(built on debian Linux) as the base image, and adds a python 3.9 installation.
 
 ## License
 

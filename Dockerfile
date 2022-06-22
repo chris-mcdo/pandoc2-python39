@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
-FROM pandoc/latex:2-alpine
+FROM pandoc/latex:2-ubuntu
 
 # Override maintainers
 LABEL maintainer='Christopher McDonald <cmcdonal33@gmail.com>'
 
-# ensure local python is preferred over distribution python
+# Python 3.9 build ---------------------------------------------------------------
+# Based on python3.9:slim-bullseye
 ENV PATH /usr/local/bin:$PATH
 
 # http://bugs.python.org/issue19846
@@ -13,48 +14,45 @@ ENV LANG C.UTF-8
 
 # runtime dependencies
 RUN set -eux; \
-	apk add --no-cache \
+	apt-get update; \
+	apt-get install -y --no-install-recommends \
 		ca-certificates \
+		netbase \
 		tzdata \
-	;
+	; \
+	rm -rf /var/lib/apt/lists/*
 
 ENV GPG_KEY E3FF2839C048B25C084DEBE9B26995E310250568
 ENV PYTHON_VERSION 3.9.13
 
-# Build dependencies
 RUN set -eux; \
 	\
-	apk add --no-cache --virtual .python-build-deps \
-        # These 3 also seem to be required for latex
-        # So remove them here when using alpine-latex
-		gnupg \
-		tar \
-		xz \
-		\
-		bluez-dev \
-		bzip2-dev \
-		dpkg-dev dpkg \
-		expat-dev \
-		findutils \
+	savedAptMark="$(apt-mark showmanual)"; \
+	apt-get update; \
+	apt-get install -y --no-install-recommends \
+		dpkg-dev \
 		gcc \
-		gdbm-dev \
-		libc-dev \
+		gnupg dirmngr \
+		libbluetooth-dev \
+		libbz2-dev \
+		libc6-dev \
+		libexpat1-dev \
 		libffi-dev \
-		libnsl-dev \
-		libtirpc-dev \
-		linux-headers \
+		libgdbm-dev \
+		# libgdbm-compat-dev added in order to build the _dbm module
+		# https://askubuntu.com/a/1106311
+		libgdbm-compat-dev \
+		liblzma-dev \
+		libncursesw5-dev \
+		libreadline-dev \
+		libsqlite3-dev \
+		libssl-dev \
 		make \
-		ncurses-dev \
-		openssl-dev \
-		pax-utils \
-		readline-dev \
-		sqlite-dev \
-		tcl-dev \
-		tk \
 		tk-dev \
-		util-linux-dev \
-		xz-dev \
-		zlib-dev \
+		uuid-dev \
+		wget \
+		xz-utils \
+		zlib1g-dev \
 	; \
 	\
 	wget -O python.tar.xz "https://www.python.org/ftp/python/${PYTHON_VERSION%%[a-z]*}/Python-$PYTHON_VERSION.tar.xz"; \
@@ -81,9 +79,6 @@ RUN set -eux; \
 	; \
 	nproc="$(nproc)"; \
 	make -j "$nproc" \
-# set thread stack size to 1MB so we don't segfault before we hit sys.getrecursionlimit()
-# https://github.com/alpinelinux/aports/commit/2026e1259422d4e0cf92391ca2d3844356c649d0
-		EXTRA_CFLAGS="-DTHREAD_STACK_SIZE=0x100000" \
 		LDFLAGS="-Wl,--strip-all" \
 	; \
 	make install; \
@@ -91,7 +86,6 @@ RUN set -eux; \
 	cd /; \
 	rm -rf /usr/src/python; \
 	\
-    # I sure hope these don't mess with the pandoc installation
 	find /usr/local -depth \
 		\( \
 			\( -type d -a \( -name test -o -name tests -o -name idle_test \) \) \
@@ -99,13 +93,20 @@ RUN set -eux; \
 		\) -exec rm -rf '{}' + \
 	; \
 	\
-	find /usr/local -type f -executable -not \( -name '*tkinter*' \) -exec scanelf --needed --nobanner --format '%n#p' '{}' ';' \
-		| tr ',' '\n' \
+	ldconfig; \
+	\
+	apt-mark auto '.*' > /dev/null; \
+	apt-mark manual $savedAptMark; \
+	find /usr/local -type f -executable -not \( -name '*tkinter*' \) -exec ldd '{}' ';' \
+		| awk '/=>/ { print $(NF-1) }' \
 		| sort -u \
-		| awk 'system("[ -e /usr/local/lib/" $1 " ]") == 0 { next } { print "so:" $1 }' \
-		| xargs -rt apk add --no-network --virtual .python-rundeps \
+		| xargs -r dpkg-query --search \
+		| cut -d: -f1 \
+		| sort -u \
+		| xargs -r apt-mark manual \
 	; \
-	apk del --no-network .python-build-deps; \
+	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
+	rm -rf /var/lib/apt/lists/*; \
 	\
 	python3 --version
 
@@ -128,8 +129,17 @@ ENV PYTHON_GET_PIP_SHA256 8dd03e99645c19f49bbb629ce65c46b665ee92a1d94d246418bad6
 
 RUN set -eux; \
 	\
+	savedAptMark="$(apt-mark showmanual)"; \
+	apt-get update; \
+	apt-get install -y --no-install-recommends wget; \
+	\
 	wget -O get-pip.py "$PYTHON_GET_PIP_URL"; \
 	echo "$PYTHON_GET_PIP_SHA256 *get-pip.py" | sha256sum -c -; \
+	\
+	apt-mark auto '.*' > /dev/null; \
+	[ -z "$savedAptMark" ] || apt-mark manual $savedAptMark > /dev/null; \
+	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
+	rm -rf /var/lib/apt/lists/*; \
 	\
 	export PYTHONDONTWRITEBYTECODE=1; \
 	\
