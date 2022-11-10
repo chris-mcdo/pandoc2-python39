@@ -15,7 +15,7 @@ ENV LANG C.UTF-8
 # runtime dependencies
 RUN set -eux; \
 	apt-get update; \
-	apt-get install -y --no-install-recommends \
+	DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
 		ca-certificates \
 		netbase \
 		tzdata \
